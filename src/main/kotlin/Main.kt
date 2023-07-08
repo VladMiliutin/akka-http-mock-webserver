@@ -1,10 +1,15 @@
+import akka.Done
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.javadsl.Behaviors
 import akka.http.javadsl.Http
 import akka.http.javadsl.ServerBinding
 import akka.http.javadsl.server.AllDirectives
 import akka.http.javadsl.server.Route
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
+import akka.http.javadsl.marshallers.jackson.Jackson;
+import akka.http.javadsl.model.StatusCodes;
+import akka.http.javadsl.server.PathMatchers.longSegment;
 
 @Throws(Exception::class)
 fun main() {
@@ -23,14 +28,41 @@ fun main() {
         .thenAccept { _: Any? -> system.terminate() } // and shutdown when done
 }
 
+data class Item(val name: String, val id: Long)
+data class Order(val items: List<Item>)
+// (fake) async database query api
+private fun fetchItem(itemId: Long): CompletionStage<Item?>{
+    return CompletableFuture.completedFuture(Item("foo", itemId))
+}
+
+// (fake) async database query api
+private fun saveOrder(order: Order): CompletionStage<Done> {
+    return CompletableFuture.completedFuture(Done.getInstance())
+}
 class Routes: AllDirectives() {
 
     fun createRoute(): Route? {
         return concat(
-            path("hello") {
-                get {
-                    complete("<h1>Say hello to akka-http</h1>")
+            get {
+                pathPrefix("item") {
+                    path(longSegment()) { id ->
+                        return@path onSuccess(fetchItem(id)) { maybeItem ->
+                            return@onSuccess maybeItem?.let { item ->
+                                completeOK(item, Jackson.marshaller<Item>())
+                            } ?: complete(StatusCodes.NOT_FOUND, "Not found")
+                        }
+                    }
                 }
-            })
+            },
+            post {
+                path("create-order") {
+                    entity(Jackson.unmarshaller(Order::class.java)) { order ->
+                        return@entity onSuccess(saveOrder(order)) { _ ->
+                            complete("Order created")
+                        }
+                    }
+                }
+            }
+        )
     }
 }
