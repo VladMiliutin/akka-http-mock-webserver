@@ -50,7 +50,97 @@ class RouteBuilder(private val mapper: ObjectMapper): AllDirectives() {
         }
         // Routes are sensitive to / at the begging of the path
         val path = if (mock.path.startsWith("/")) mock.path.substring(1 until mock.path.length) else mock.path
-        return if (path.contains(PATH_PARAM_REGEX)) pathParamRoute(path, headers, mock.response, mock.statusCode) else simpleRoute(path, headers, mock.response, mock.statusCode)
+        return if (mock.method == "GET" && mock.response.isArray)
+                paginationRoute(path, headers, mock.response as ArrayNode, mock.statusCode)
+            else if (path.contains(PATH_PARAM_REGEX))
+                pathParamRoute(path, headers, mock.response, mock.statusCode)
+            else
+                simpleRoute(path, headers, mock.response, mock.statusCode)
+    }
+
+    // DEBT: Minor duplication
+    private fun paginationRoute(path: String, headers: Iterable<HttpHeader>, response: ArrayNode, statusCode: Int) : Route {
+        val paginate: (ArrayNode, Map<String, String>) -> ArrayNode = { res: ArrayNode, params: Map<String, String> ->
+            val page = params["page"]!!.toInt()
+            val pageSize = params["pageSize"]!!.toInt()
+            val start = (page - 1) * pageSize
+            val end = start + pageSize
+            val paginatedResponse = mapper.createArrayNode()
+
+            for (i in start until end) {
+                if (i >= res.size()) {
+                    break
+                }
+                paginatedResponse.add(res.get(i))
+            }
+
+            paginatedResponse
+        }
+
+        val sort: (ArrayNode, Map<String, String>) -> ArrayNode = { res: ArrayNode, params: Map<String, String> ->
+            val sortBy = params["sortBy"]!!
+            val sortDirection = params["sortDirection"] ?: "asc"
+            val sortedResponse = this.sortResponse(res, sortBy, sortDirection)
+
+            sortedResponse
+        }
+
+        val sortingAndPagination: (ArrayNode, Int, Iterable<HttpHeader>) -> Route = { res: ArrayNode, code: Int, httpHeaders: Iterable<HttpHeader> ->
+                parameterMap { params ->
+                    val modifiedResponse = mapper.createArrayNode()
+                    if (params.contains("sortBy") && params.contains("page")) {
+                        val sorted = sort(res, params)
+                        modifiedResponse.addAll(paginate(sorted, params))
+                    } else if (params.contains("sortBy")) {
+                        modifiedResponse.addAll(sort(res, params))
+                    } else if (params.contains("page")) {
+                        modifiedResponse.addAll(paginate(res, params))
+                    } else {
+                        modifiedResponse.addAll(res)
+                    }
+
+                    return@parameterMap complete(
+                        StatusCodes.get(code),
+                        httpHeaders,
+                        modifiedResponse,
+                        Jackson.marshaller()
+                    )
+                }
+        }
+
+        return if (path.contains(PATH_PARAM_REGEX)) {
+            val paramName = PATH_PARAM_REGEX.find(path)!!.value.substringBefore("}").substring(1)
+            val pathPrefix = path.substring(0, path.indexOf("{")).substringBefore("/")
+
+            return pathPrefix(pathPrefix) {
+                return@pathPrefix path(segment()) { param ->
+                    val modifiedResponse = this.replaceResponseValue(response, paramName, param)
+                    sortingAndPagination(modifiedResponse as ArrayNode, statusCode, headers)
+                }
+            }
+        } else {
+            return path(path) {
+                sortingAndPagination(response, statusCode, headers)
+            }
+        }
+    }
+
+    private fun sortResponse(response: ArrayNode, sortBy: String, sortDirection: String): ArrayNode {
+        val sortedResponse = mapper.createArrayNode()
+        val asList = ArrayList(response.toList())
+
+        val comparator: Comparator<JsonNode> = Comparator { o1, o2 ->
+            o1.get(sortBy).asText().compareTo(o2.get(sortBy).asText())
+        }
+
+        val comparatorWithOrder = if (sortDirection == "desc") {
+            comparator.reversed()
+        } else {
+            comparator
+        }
+        QuickSort.sort(asList, comparatorWithOrder)
+
+        return sortedResponse.addAll(asList)
     }
 
     private fun pathParamRoute(path: String, headers: Iterable<HttpHeader>, response: JsonNode, statusCode: Int) : Route {

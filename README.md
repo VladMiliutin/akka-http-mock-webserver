@@ -10,6 +10,6 @@ It is meant to be used as a standalone server.
 - [x] Read mock files from specified directory 
 - [x] Create routes based on this files
 - [x] Support for path variables
-- [ ] Add support in-house filter, pagination, sorting
+- [x] Add support in-house filter, pagination, sorting
 - [ ] Wrap it in docker container
 - [ ] Add support for json path?

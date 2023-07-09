@@ -1,0 +1,25 @@
+{
+  "name": "Hello World",
+  "method": "GET",
+  "path": "/array",
+  "statusCode": 200,
+  "simulateStreaming": false,
+  "headers": [{
+    "name": "Content-Type",
+    "value": "application/json"
+  }],
+  "response": [
+    {
+      "id": 1,
+      "name": "test"
+    },
+    {
+      "id": 2,
+      "name": "admin"
+    },
+    {
+      "id": 3,
+      "name": "mod"
+    }
+  ]
+}
