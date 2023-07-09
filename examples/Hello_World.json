@@ -1,14 +1,21 @@
 {
   "name": "Hello World",
   "method": "GET",
-  "path": "/hello",
+  "path": "/hello/{name}",
   "statusCode": 200,
   "simulateStreaming": false,
   "headers": [{
     "name": "Content-Type",
-    "value": "text/plain"
+    "value": "application/json"
   }],
   "response": {
-    "greetingText": "Hello World"
+    "greetingText": "Hello $name!",
+    "inValue_$name": "Some random value",
+    "inArrayObjNode": [
+      {
+        "Hello": "$name"
+      }
+    ],
+    "inStrArray": ["Hello", "$name"]
   }
 }

@@ -9,7 +9,7 @@ It is meant to be used as a standalone server.
 ## TODO
 - [x] Read mock files from specified directory 
 - [x] Create routes based on this files
-- [ ] Support for path variables
+- [x] Support for path variables
 - [ ] Add support in-house filter, pagination, sorting
 - [ ] Wrap it in docker container
 - [ ] Add support for json path?
