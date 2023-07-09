@@ -11,5 +11,6 @@ It is meant to be used as a standalone server.
 - [x] Create routes based on this files
 - [x] Support for path variables
 - [x] Add support in-house filter, pagination, sorting
-- [ ] Wrap it in docker container
+- [ ] Simulate streaming
+- [x] Wrap it in docker container
 - [ ] Add support for json path?

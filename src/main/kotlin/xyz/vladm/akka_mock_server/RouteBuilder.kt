@@ -1,3 +1,5 @@
+package xyz.vladm.akka_mock_server
+
 import akka.http.javadsl.marshallers.jackson.Jackson
 import akka.http.javadsl.model.HttpHeader
 import akka.http.javadsl.server.PathMatchers.segment
@@ -60,54 +62,6 @@ class RouteBuilder(private val mapper: ObjectMapper): AllDirectives() {
 
     // DEBT: Minor duplication
     private fun paginationRoute(path: String, headers: Iterable<HttpHeader>, response: ArrayNode, statusCode: Int) : Route {
-        val paginate: (ArrayNode, Map<String, String>) -> ArrayNode = { res: ArrayNode, params: Map<String, String> ->
-            val page = params["page"]!!.toInt()
-            val pageSize = params["pageSize"]!!.toInt()
-            val start = (page - 1) * pageSize
-            val end = start + pageSize
-            val paginatedResponse = mapper.createArrayNode()
-
-            for (i in start until end) {
-                if (i >= res.size()) {
-                    break
-                }
-                paginatedResponse.add(res.get(i))
-            }
-
-            paginatedResponse
-        }
-
-        val sort: (ArrayNode, Map<String, String>) -> ArrayNode = { res: ArrayNode, params: Map<String, String> ->
-            val sortBy = params["sortBy"]!!
-            val sortDirection = params["sortDirection"] ?: "asc"
-            val sortedResponse = this.sortResponse(res, sortBy, sortDirection)
-
-            sortedResponse
-        }
-
-        val sortingAndPagination: (ArrayNode, Int, Iterable<HttpHeader>) -> Route = { res: ArrayNode, code: Int, httpHeaders: Iterable<HttpHeader> ->
-                parameterMap { params ->
-                    val modifiedResponse = mapper.createArrayNode()
-                    if (params.contains("sortBy") && params.contains("page")) {
-                        val sorted = sort(res, params)
-                        modifiedResponse.addAll(paginate(sorted, params))
-                    } else if (params.contains("sortBy")) {
-                        modifiedResponse.addAll(sort(res, params))
-                    } else if (params.contains("page")) {
-                        modifiedResponse.addAll(paginate(res, params))
-                    } else {
-                        modifiedResponse.addAll(res)
-                    }
-
-                    return@parameterMap complete(
-                        StatusCodes.get(code),
-                        httpHeaders,
-                        modifiedResponse,
-                        Jackson.marshaller()
-                    )
-                }
-        }
-
         return if (path.contains(PATH_PARAM_REGEX)) {
             val paramName = PATH_PARAM_REGEX.find(path)!!.value.substringBefore("}").substring(1)
             val pathPrefix = path.substring(0, path.indexOf("{")).substringBefore("/")
@@ -122,6 +76,26 @@ class RouteBuilder(private val mapper: ObjectMapper): AllDirectives() {
             return path(path) {
                 sortingAndPagination(response, statusCode, headers)
             }
+        }
+    }
+
+
+    private fun pathParamRoute(path: String, headers: Iterable<HttpHeader>, response: JsonNode, statusCode: Int) : Route {
+        val paramName = PATH_PARAM_REGEX.find(path)!!.value.substringBefore("}").substring(1)
+        val pathPrefix = path.substring(0, path.indexOf("{")).substringBefore("/")
+
+        return pathPrefix(pathPrefix) {
+            return@pathPrefix path(segment()) { param ->
+                val modifiedResponse = this.replaceResponseValue(response, paramName, param)
+                return@path complete(StatusCodes.get(statusCode), headers, modifiedResponse, Jackson.marshaller())
+            }
+        }
+    }
+
+
+    private fun simpleRoute(path: String, headers: Iterable<HttpHeader>, response: JsonNode, statusCode: Int): Route {
+        return path(path) {
+            complete(StatusCodes.get(statusCode), headers, response, Jackson.marshaller())
         }
     }
 
@@ -143,25 +117,52 @@ class RouteBuilder(private val mapper: ObjectMapper): AllDirectives() {
         return sortedResponse.addAll(asList)
     }
 
-    private fun pathParamRoute(path: String, headers: Iterable<HttpHeader>, response: JsonNode, statusCode: Int) : Route {
-        val paramName = PATH_PARAM_REGEX.find(path)!!.value.substringBefore("}").substring(1)
-        val pathPrefix = path.substring(0, path.indexOf("{")).substringBefore("/")
+    private fun paginate(res: ArrayNode, params: Map<String, String>): ArrayNode {
+        val page = params["page"]!!.toInt()
+        val pageSize = params["pageSize"]!!.toInt()
+        val start = (page - 1) * pageSize
+        val end = start + pageSize
+        val paginatedResponse = mapper.createArrayNode()
 
-        return pathPrefix(pathPrefix) {
-            return@pathPrefix path(segment()) { param ->
-                val modifiedResponse = this.replaceResponseValue(response, paramName, param)
-                return@path complete(StatusCodes.get(statusCode), headers, modifiedResponse, Jackson.marshaller())
+        for (i in start until end) {
+            if (i >= res.size()) {
+                break
             }
+            paginatedResponse.add(res.get(i))
         }
+
+        return paginatedResponse
     }
 
+    private fun sort(res: ArrayNode, params: Map<String, String>): ArrayNode {
+        val sortBy = params["sortBy"]!!
+        val sortDirection = params["sortDirection"] ?: "asc"
 
-    private fun simpleRoute(path: String, headers: Iterable<HttpHeader>, response: JsonNode, statusCode: Int): Route {
-        return path(path) {
-            complete(StatusCodes.get(statusCode), headers, response, Jackson.marshaller())
-        }
+        return sortResponse(res, sortBy, sortDirection)
     }
 
+    private fun sortingAndPagination(res: ArrayNode, code: Int, httpHeaders: Iterable<HttpHeader>): Route {
+        return parameterMap { params ->
+            val modifiedResponse = mapper.createArrayNode()
+            if (params.contains("sortBy") && params.contains("page")) {
+                val sorted = sort(res, params)
+                modifiedResponse.addAll(paginate(sorted, params))
+            } else if (params.contains("sortBy")) {
+                modifiedResponse.addAll(sort(res, params))
+            } else if (params.contains("page")) {
+                modifiedResponse.addAll(paginate(res, params))
+            } else {
+                modifiedResponse.addAll(res)
+            }
+
+            return@parameterMap complete(
+                StatusCodes.get(code),
+                httpHeaders,
+                modifiedResponse,
+                Jackson.marshaller()
+            )
+        }
+    }
     /// DEBT: Avoid recursion
     private fun replaceResponseValue(response: JsonNode, paramName: String, paramValue: String): JsonNode {
         val variableName = "$$paramName"

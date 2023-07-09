@@ -1,3 +1,5 @@
+package xyz.vladm.akka_mock_server
+
 /**
  * I know that native sort is much better, but just want to keep memory on the Algorithm
  */

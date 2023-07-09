@@ -1,3 +1,5 @@
+package xyz.vladm.akka_mock_server
+
 import akka.Done
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.javadsl.Behaviors

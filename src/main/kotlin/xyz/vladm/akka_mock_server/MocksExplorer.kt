@@ -1,3 +1,5 @@
+package xyz.vladm.akka_mock_server
+
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.io.File
