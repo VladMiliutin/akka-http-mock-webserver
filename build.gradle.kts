@@ -14,7 +14,7 @@ val versions = Versions("2.7.0", "2.13")
 
 dependencies {
     implementation(platform("com.typesafe.akka:akka-http-bom_${versions.scalaBinary}:10.5.2"))
-
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.15.+")
     implementation("com.typesafe.akka:akka-actor-typed_${versions.scalaBinary}:${versions.akkaVersion}")
     implementation("com.typesafe.akka:akka-stream_${versions.scalaBinary}:${versions.akkaVersion}")
     implementation("com.typesafe.akka:akka-http_${versions.scalaBinary}")

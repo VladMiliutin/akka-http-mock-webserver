@@ -3,29 +3,46 @@ import akka.actor.typed.ActorSystem
 import akka.actor.typed.javadsl.Behaviors
 import akka.http.javadsl.Http
 import akka.http.javadsl.ServerBinding
+import akka.http.javadsl.marshallers.jackson.Jackson
+import akka.http.javadsl.model.StatusCodes
 import akka.http.javadsl.server.AllDirectives
+import akka.http.javadsl.server.PathMatchers.longSegment
 import akka.http.javadsl.server.Route
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.KotlinFeature
+import com.fasterxml.jackson.module.kotlin.KotlinModule
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
-import akka.http.javadsl.marshallers.jackson.Jackson;
-import akka.http.javadsl.model.StatusCodes;
-import akka.http.javadsl.server.PathMatchers.longSegment;
 
 @Throws(Exception::class)
-fun main() {
+fun main(args: Array<String>) {
+    val port = System.getProperty("http.port", "8080").toInt()
+    val folder = System.getProperty("mock.source-folder", "./examples")
+    val mapper = ObjectMapper().registerModule(
+        KotlinModule.Builder()
+            .withReflectionCacheSize(512)
+            .configure(KotlinFeature.NullToEmptyCollection, true)
+            .configure(KotlinFeature.NullToEmptyMap, true)
+            .configure(KotlinFeature.NullIsSameAsDefault, true)
+            .configure(KotlinFeature.StrictNullChecks, false)
+            .build()
+    ).configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+
+    val mocksExplorer = MocksExplorer(mapper)
+    val mocks = mocksExplorer.findMocks(folder)
+
+    val route = RouteBuilder(mapper).build(mocks)
+
     // boot up server using the route as defined below
     val system: ActorSystem<Void> = ActorSystem.create(Behaviors.empty(), "routes")
     val http: Http = Http.get(system)
 
-    val routes: Routes = Routes()
     //In order to access all directives we need an instance where the routes are define.
-    val binding: CompletionStage<ServerBinding> = http.newServerAt("localhost", 8080)
-        .bind(routes.createRoute())
-    println("Server online at http://localhost:8080/\nPress RETURN to stop...")
-    System.`in`.read() // let it run until user presses return
-    binding
-        .thenCompose(ServerBinding::unbind) // trigger unbinding from the port
-        .thenAccept { _: Any? -> system.terminate() } // and shutdown when done
+    val binding: CompletionStage<ServerBinding> = http.newServerAt("localhost", port)
+        .bind(route)
+//        .bind(Routes().createRoute())
+    println("Server online at http://localhost:$port/")
 }
 
 data class Item(val name: String, val id: Long)
@@ -41,7 +58,7 @@ private fun saveOrder(order: Order): CompletionStage<Done> {
 }
 class Routes: AllDirectives() {
 
-    fun createRoute(): Route? {
+    fun createRoute(): Route {
         return concat(
             get {
                 pathPrefix("item") {

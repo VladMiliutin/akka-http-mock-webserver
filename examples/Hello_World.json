@@ -1,0 +1,14 @@
+{
+  "name": "Hello World",
+  "method": "GET",
+  "path": "/hello",
+  "statusCode": 200,
+  "simulateStreaming": false,
+  "headers": [{
+    "name": "Content-Type",
+    "value": "text/plain"
+  }],
+  "response": {
+    "greetingText": "Hello World"
+  }
+}
