@@ -143,16 +143,17 @@ class RouteBuilder(private val mapper: ObjectMapper): AllDirectives() {
 
     private fun sortingAndPagination(res: ArrayNode, code: Int, httpHeaders: Iterable<HttpHeader>): Route {
         return parameterMap { params ->
-            val modifiedResponse = mapper.createArrayNode()
-            if (params.contains("sortBy") && params.contains("page")) {
-                val sorted = sort(res, params)
-                modifiedResponse.addAll(paginate(sorted, params))
-            } else if (params.contains("sortBy")) {
+            var modifiedResponse = mapper.createArrayNode()
+            if (params.contains("sortBy")) {
                 modifiedResponse.addAll(sort(res, params))
-            } else if (params.contains("page")) {
-                modifiedResponse.addAll(paginate(res, params))
-            } else {
-                modifiedResponse.addAll(res)
+            }
+
+            if (modifiedResponse.isEmpty) {
+                modifiedResponse = res
+            }
+
+            if (params.contains("page")) {
+                modifiedResponse = paginate(modifiedResponse, params)
             }
 
             return@parameterMap complete(
@@ -166,12 +167,10 @@ class RouteBuilder(private val mapper: ObjectMapper): AllDirectives() {
     /// DEBT: Avoid recursion
     private fun replaceResponseValue(response: JsonNode, paramName: String, paramValue: String): JsonNode {
         val variableName = "$$paramName"
-        println(response.nodeType)
         return if (response.isObject) {
             val modifiedNode = mapper.createObjectNode()
             val objectNode = response as ObjectNode
             objectNode.fields().forEach { field ->
-                println("Field: ${field.key} = ${field.value}. Type = ${field.value.nodeType}")
                 val newKey = field.key.replace(variableName, paramValue)
                 if (field.value.isTextual) {
                     modifiedNode.put(newKey, field.value.asText().replace(variableName, paramValue))
@@ -190,7 +189,6 @@ class RouteBuilder(private val mapper: ObjectMapper): AllDirectives() {
                     }
                 }
 
-                println("Modified node: $modifiedNode")
             }
 
             modifiedNode
